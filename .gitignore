@@ -1,0 +1,6 @@
+/target
+/web/node_modules
+/web/dist
+/web/pkg
+/web/wasm/target
+/web/wasm/pkg
