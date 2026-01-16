@@ -1,5 +1,9 @@
 # bjrs
 
+[![Crates.io](https://img.shields.io/crates/v/bjrs.svg)](https://crates.io/crates/bjrs)
+[![Docs.rs](https://docs.rs/bjrs/badge.svg)](https://docs.rs/bjrs)
+[![License](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)](LICENSE)
+
 A blackjack game engine with optional `no_std` support.
 
 ## Features
