@@ -31,12 +31,12 @@ std = ["rand/std", "rand_chacha/std", "thiserror/std"]
 alloc = ["dep:hashbrown", "dep:spin", "dep:libm"]
 
 [dependencies]
-hashbrown = { version = "0.16.1", features = ["alloc", "core"], optional = true }
+hashbrown = { version = "0.17", features = ["alloc", "core"], optional = true }
 spin = { version = "0.10", optional = true }
-rand = { version = "0.9", default-features = false, features = ["alloc"] }
-rand_chacha = { version = "0.9", default-features = false }
+rand = { version = "0.10", default-features = false, features = ["alloc"] }
+rand_chacha = { version = "0.10", default-features = false }
 libm = { version = "0.2", optional = true }
-thiserror = { version = "2.0", default-features = false }
+thiserror = { version = "2", default-features = false }
 
 [lints.rust]
 missing_docs = "warn"
