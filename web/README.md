@@ -27,7 +27,7 @@ pnpm dev
 
 Before the first deployment:
 
-1. Create a Cloudflare Pages Direct Upload project with `main` as its production branch.
+1. Create a Cloudflare Pages Direct Upload project. The workflow sets `main` as its production branch.
 2. Add these repository secrets:
    - `CLOUDFLARE_API_TOKEN`: a Cloudflare API token with `Account` / `Cloudflare Pages` / `Edit` permission.
    - `CLOUDFLARE_ACCOUNT_ID`: the Cloudflare account ID that owns the Pages project.
