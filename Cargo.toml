@@ -32,7 +32,7 @@ alloc = ["dep:hashbrown", "dep:spin", "dep:libm"]
 
 [dependencies]
 hashbrown = { version = "0.17", features = ["alloc", "core"], optional = true }
-spin = { version = "0.10", optional = true }
+spin = { version = "0.12", optional = true }
 rand = { version = "0.10", default-features = false, features = ["alloc"] }
 rand_chacha = { version = "0.10", default-features = false }
 libm = { version = "0.2", optional = true }
