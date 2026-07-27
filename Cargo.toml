@@ -46,6 +46,8 @@ allow_attributes = "deny" # Use expect(lint) instead
 cargo = { level = "warn", priority = -1 }
 cast_possible_truncation = "allow"
 cast_sign_loss = "allow"
+# Upstream proc macros currently require both syn v2 and v3.
+multiple_crate_versions = "allow"
 pedantic = { level = "warn", priority = -1 }
 nursery = { level = "warn", priority = -1 }
 std_instead_of_alloc = "deny"

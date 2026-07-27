@@ -6,6 +6,10 @@
 
 A blackjack game engine with optional `no_std` support.
 
+## Web demo
+
+Try the interactive WebAssembly sample at <https://bjrs.pages.dev/>.
+
 ## Features
 
 - Full round flow: betting, player actions, insurance, dealer play, showdown

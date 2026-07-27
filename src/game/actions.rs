@@ -403,15 +403,15 @@ impl Game {
 
         loop {
             // Try next hand for current player
-            if let Some(&player_id) = order.get(turn.player_index) {
-                if let Some(player_hands) = hands.get(&player_id) {
-                    turn.hand_index += 1;
-                    if turn.hand_index < player_hands.len() {
-                        if player_hands[turn.hand_index].status() == HandStatus::Active {
-                            return;
-                        }
-                        continue;
+            if let Some(&player_id) = order.get(turn.player_index)
+                && let Some(player_hands) = hands.get(&player_id)
+            {
+                turn.hand_index += 1;
+                if turn.hand_index < player_hands.len() {
+                    if player_hands[turn.hand_index].status() == HandStatus::Active {
+                        return;
                     }
+                    continue;
                 }
             }
 
@@ -425,12 +425,12 @@ impl Game {
             }
 
             // Check if this player's first hand is active
-            if let Some(&player_id) = order.get(turn.player_index) {
-                if let Some(player_hands) = hands.get(&player_id) {
-                    if !player_hands.is_empty() && player_hands[0].status() == HandStatus::Active {
-                        return;
-                    }
-                }
+            if let Some(&player_id) = order.get(turn.player_index)
+                && let Some(player_hands) = hands.get(&player_id)
+                && !player_hands.is_empty()
+                && player_hands[0].status() == HandStatus::Active
+            {
+                return;
             }
         }
     }

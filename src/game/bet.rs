@@ -10,10 +10,10 @@ impl Game {
         for &player_id in players {
             if let Some(card) = self.draw() {
                 let mut hands = self.hands.lock();
-                if let Some(player_hands) = hands.get_mut(&player_id) {
-                    if let Some(hand) = player_hands.first_mut() {
-                        hand.add_card(card);
-                    }
+                if let Some(player_hands) = hands.get_mut(&player_id)
+                    && let Some(hand) = player_hands.first_mut()
+                {
+                    hand.add_card(card);
                 }
             }
         }

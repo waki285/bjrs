@@ -158,13 +158,13 @@ impl Hand {
 
     /// Returns the number of cards in the hand.
     #[must_use]
-    pub fn len(&self) -> usize {
+    pub const fn len(&self) -> usize {
         self.cards.len()
     }
 
     /// Returns whether the hand is empty.
     #[must_use]
-    pub fn is_empty(&self) -> bool {
+    pub const fn is_empty(&self) -> bool {
         self.cards.is_empty()
     }
 
@@ -261,13 +261,13 @@ impl DealerHand {
 
     /// Returns the number of cards.
     #[must_use]
-    pub fn len(&self) -> usize {
+    pub const fn len(&self) -> usize {
         self.cards.len()
     }
 
     /// Returns whether the hand is empty.
     #[must_use]
-    pub fn is_empty(&self) -> bool {
+    pub const fn is_empty(&self) -> bool {
         self.cards.is_empty()
     }
 
