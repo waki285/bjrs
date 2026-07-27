@@ -9,6 +9,8 @@ pub enum GameState {
     Betting,
     /// Dealing initial cards.
     Dealing,
+    /// Offering early surrender decisions before checking dealer blackjack.
+    EarlySurrender,
     /// Offering insurance decisions.
     Insurance,
     /// Waiting for player actions.

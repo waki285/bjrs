@@ -75,6 +75,9 @@ impl Game {
             return Err(DealError::NotEnoughCards);
         }
 
+        *state = GameState::Dealing;
+        drop(state);
+
         // Get player IDs who have bet (in order)
         let players = self.players.lock();
         let betting_players: Vec<u8> = players
@@ -126,26 +129,9 @@ impl Game {
         // Clear insurance state
         self.insurance_bets.lock().clear();
         self.insurance_decided.lock().clear();
+        self.early_surrender_decided.lock().clear();
 
-        // Check if dealer's up card is an Ace and insurance is offered
-        let dealer_up_card_is_ace = self
-            .dealer_hand
-            .lock()
-            .up_card()
-            .is_some_and(|c| c.rank == 1);
-
-        if dealer_up_card_is_ace && self.options.insurance {
-            *state = GameState::Insurance;
-        } else {
-            // Skip players with blackjack
-            self.advance_if_current_inactive();
-            *state = if self.all_players_done() {
-                GameState::DealerTurn
-            } else {
-                GameState::PlayerTurn
-            };
-            drop(state);
-        }
+        self.begin_initial_action_phase();
 
         Ok(())
     }

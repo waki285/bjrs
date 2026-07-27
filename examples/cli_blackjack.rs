@@ -5,7 +5,9 @@
 use std::io::{self, Write};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use bjrs::{Card, DoubleOption, Game, GameOptions, GameState, Hand, HandStatus, Suit};
+use bjrs::{
+    Card, DoubleOption, Game, GameOptions, GameState, Hand, HandStatus, Suit, SurrenderOption,
+};
 
 fn main() {
     println!("Blackjack CLI example (type 'q' to quit)");
@@ -50,6 +52,27 @@ fn main() {
             println!("Deal error: {err:?}");
             game.clear_round();
             continue;
+        }
+
+        while game.state() == GameState::EarlySurrender {
+            print_table(&game, player_id);
+            println!("Early surrender: [u]surrender [c]continue");
+            let action = prompt_line("Action: ");
+            let turn = game.current_turn();
+
+            let result = match action.as_str() {
+                "u" | "surrender" => game.surrender(player_id, turn.hand_index).map(|_| ()),
+                "c" | "continue" => game.decline_early_surrender(player_id),
+                "q" | "quit" => return,
+                _ => {
+                    println!("Unknown action.");
+                    continue;
+                }
+            };
+
+            if let Err(err) = result {
+                println!("Action error: {err:?}");
+            }
         }
 
         if game.is_insurance_offered() {
@@ -304,6 +327,7 @@ fn available_actions(game: &Game, player_id: u8) -> ActionAvailability {
     let can_double_value = match game.options.double {
         DoubleOption::Any => true,
         DoubleOption::NineOrTen => hand.value() == 9 || hand.value() == 10,
+        DoubleOption::TenOrEleven => hand.value() == 10 || hand.value() == 11,
         DoubleOption::NineThrough11 => (9..=11).contains(&hand.value()),
         DoubleOption::NineThrough15 => (9..=15).contains(&hand.value()),
         DoubleOption::None => false,
@@ -322,7 +346,9 @@ fn available_actions(game: &Game, player_id: u8) -> ActionAvailability {
         && has_funds_for_split
         && !(is_ace && hand.is_from_split() && game.options.split_aces_only_once);
 
-    let can_surrender = game.options.surrender && hand.len() == 2 && !hand.is_from_split();
+    let can_surrender = matches!(game.options.surrender, SurrenderOption::Late)
+        && hand.len() == 2
+        && !hand.is_from_split();
 
     ActionAvailability {
         hit: true,

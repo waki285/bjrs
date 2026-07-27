@@ -77,6 +77,7 @@ type PhaseCopy = {
 type TableRules = Required<WasmGameOptions>;
 type DoubleRule = TableRules["double"];
 type RoundingRule = TableRules["roundingBlackjack"];
+type SurrenderRule = TableRules["surrender"];
 
 const makeSeed = () => Math.floor(Date.now() % 2 ** 32);
 
@@ -90,7 +91,7 @@ const defaultTableRules: TableRules = {
   splitAcesOnlyOnce: true,
   splitAcesReceiveOneCard: true,
   insurance: true,
-  surrender: true,
+  surrender: "late",
   roundingBlackjack: "down",
   roundingSurrender: "nearest",
   penetration: 0.75,
@@ -108,9 +109,16 @@ const blackjackPayoutOptions = [
 const doubleRuleOptions: Array<{ value: DoubleRule; label: string }> = [
   { value: "any", label: "Any total" },
   { value: "nineOrTen", label: "9 or 10" },
+  { value: "tenOrEleven", label: "10 or 11" },
   { value: "nineThrough11", label: "9 through 11" },
   { value: "nineThrough15", label: "9 through 15" },
   { value: "none", label: "Never" },
+];
+
+const surrenderRuleOptions: Array<{ value: SurrenderRule; label: string }> = [
+  { value: "none", label: "None" },
+  { value: "early", label: "Early" },
+  { value: "late", label: "Late" },
 ];
 
 const splitOptions = [
@@ -173,6 +181,8 @@ const doubleRuleAllows = (rule: DoubleRule, value: number) => {
       return true;
     case "nineOrTen":
       return value === 9 || value === 10;
+    case "tenOrEleven":
+      return value === 10 || value === 11;
     case "nineThrough11":
       return value >= 9 && value <= 11;
     case "nineThrough15":
@@ -195,6 +205,8 @@ const stateLabel = (state: string | undefined) => {
       return "Place wager";
     case "Dealing":
       return "Dealing";
+    case "EarlySurrender":
+      return "Surrender decision";
     case "Insurance":
       return "Insurance";
     case "PlayerTurn":
@@ -246,7 +258,11 @@ const outcomeTone = (outcome: string) => {
   return "neutral";
 };
 
-const getPhaseCopy = (snapshot: Snapshot | null, result: JsRoundResult | null): PhaseCopy => {
+const getPhaseCopy = (
+  snapshot: Snapshot | null,
+  result: JsRoundResult | null,
+  isGameOver: boolean,
+): PhaseCopy => {
   if (!snapshot) {
     return {
       title: "Loading",
@@ -259,6 +275,12 @@ const getPhaseCopy = (snapshot: Snapshot | null, result: JsRoundResult | null): 
     };
   }
 
+  if (isGameOver) {
+    return {
+      title: "Game over",
+    };
+  }
+
   switch (snapshot.state) {
     case "Betting":
       return {
@@ -267,6 +289,10 @@ const getPhaseCopy = (snapshot: Snapshot | null, result: JsRoundResult | null): 
     case "Insurance":
       return {
         title: "Dealer shows ace",
+      };
+    case "EarlySurrender":
+      return {
+        title: "Surrender?",
       };
     case "PlayerTurn":
       return {
@@ -426,6 +452,9 @@ export default function App() {
     : "-";
   const isActivePlayer = snapshot?.player_id === snapshot?.current_turn?.player_id;
   const isActiveHand = isPlayerTurn && isActivePlayer && activeHand?.status === "Active";
+  const isEarlySurrenderTurn = Boolean(
+    snapshot?.state === "EarlySurrender" && isActivePlayer && activeHand?.status === "Active",
+  );
   const availableBalance = snapshot?.money ?? 0;
   const canPlaceBet = Boolean(
     joined && snapshot?.state === "Betting" && bet >= 1 && availableBalance >= bet,
@@ -449,13 +478,16 @@ export default function App() {
       availableBalance >= (activeHand?.bet ?? 0),
   );
   const canSurrender = Boolean(
-    isActiveHand &&
-      activeHand &&
-      rules.surrender &&
+    activeHand &&
       activeHand.cards.length === 2 &&
-      !activeHand.from_split,
+      !activeHand.from_split &&
+      ((rules.surrender === "early" && isEarlySurrenderTurn) ||
+        (rules.surrender === "late" && isActiveHand)),
   );
-  const phase = getPhaseCopy(snapshot, result);
+  const isGameOver = Boolean(
+    result && joined && snapshot?.state === "RoundOver" && availableBalance === 0,
+  );
+  const phase = getPhaseCopy(snapshot, result, isGameOver);
 
   useEffect(() => {
     let cancelled = false;
@@ -663,6 +695,22 @@ export default function App() {
       );
     }
 
+    if (isGameOver) {
+      return (
+        <div className="game-over-actions">
+          {result ? <Settlement result={result} /> : null}
+          <div className="game-over-restart">
+            <p role="status">
+              Balance: <strong>{formatCredits(availableBalance)}</strong>
+            </p>
+            <button className="button button-primary" onClick={handleReset} type="button">
+              Choose new bankroll
+            </button>
+          </div>
+        </div>
+      );
+    }
+
     if (snapshot?.state === "Betting") {
       return (
         <form
@@ -697,6 +745,29 @@ export default function App() {
             </p>
           </div>
         </form>
+      );
+    }
+
+    if (snapshot?.state === "EarlySurrender" && activeHand) {
+      return (
+        <div className="decision-actions">
+          <button
+            className="button button-primary"
+            disabled={!canSurrender}
+            onClick={() => withGame((instance) => instance.surrender(activeHandIndex))}
+            type="button"
+          >
+            Surrender
+          </button>
+          <button
+            className="button button-secondary"
+            disabled={!isEarlySurrenderTurn}
+            onClick={() => withGame((instance) => instance.decline_early_surrender())}
+            type="button"
+          >
+            Keep playing
+          </button>
+        </div>
       );
     }
 
@@ -1031,7 +1102,7 @@ export default function App() {
                   <label className="rule-control" htmlFor="surrender-rounding">
                     <span>Surrender rounding</span>
                     <select
-                      disabled={joined}
+                      disabled={joined || rules.surrender === "none"}
                       id="surrender-rounding"
                       onChange={(event) =>
                         updateRules({ roundingSurrender: event.target.value as RoundingRule })
@@ -1129,13 +1200,20 @@ export default function App() {
                   </label>
                   <label className="rule-control" htmlFor="surrender">
                     <span>Surrender</span>
-                    <input
-                      checked={rules.surrender}
+                    <select
                       disabled={joined}
                       id="surrender"
-                      onChange={(event) => updateRules({ surrender: event.target.checked })}
-                      type="checkbox"
-                    />
+                      onChange={(event) =>
+                        updateRules({ surrender: event.target.value as SurrenderRule })
+                      }
+                      value={rules.surrender}
+                    >
+                      {surrenderRuleOptions.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
                   </label>
                 </div>
               </fieldset>

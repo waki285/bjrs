@@ -4,11 +4,14 @@ declare module "../wasm/pkg/bjrs_wasm" {
   export type WasmDoubleOption =
     | "any"
     | "nineOrTen"
+    | "tenOrEleven"
     | "nineThrough11"
     | "nineThrough15"
     | "none";
 
   export type WasmRoundingMode = "up" | "down" | "nearest";
+
+  export type WasmSurrenderOption = "none" | "early" | "late";
 
   export type WasmGameOptions = {
     decks?: number;
@@ -20,7 +23,7 @@ declare module "../wasm/pkg/bjrs_wasm" {
     splitAcesOnlyOnce?: boolean;
     splitAcesReceiveOneCard?: boolean;
     insurance?: boolean;
-    surrender?: boolean;
+    surrender?: WasmSurrenderOption;
     roundingBlackjack?: WasmRoundingMode;
     roundingSurrender?: WasmRoundingMode;
     penetration?: number;

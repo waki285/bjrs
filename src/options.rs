@@ -9,12 +9,27 @@ pub enum DoubleOption {
     Any,
     /// Double down allowed only on 9 or 10.
     NineOrTen,
+    /// Double down allowed only on 10 or 11.
+    TenOrEleven,
     /// Double down allowed only on 9 through 11.
     NineThrough11,
     /// Double down allowed only on 9 through 15.
     NineThrough15,
     /// Double down not allowed.
     None,
+}
+
+/// Conditions under which surrender is allowed.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+#[non_exhaustive]
+pub enum SurrenderOption {
+    /// Surrender is not allowed.
+    None,
+    /// Surrender is offered before the dealer checks for blackjack.
+    Early,
+    /// Surrender is offered after the dealer checks for blackjack.
+    #[default]
+    Late,
 }
 
 /// Rounding mode for payouts.
@@ -58,8 +73,8 @@ pub struct GameOptions {
     pub split_aces_only_once: bool,
     /// Whether split aces receive only one card.
     pub split_aces_receive_one_card: bool,
-    /// Whether surrender is allowed.
-    pub surrender: bool,
+    /// Conditions under which surrender is allowed.
+    pub surrender: SurrenderOption,
     /// Whether insurance is offered.
     pub insurance: bool,
     /// Rounding mode for blackjack payouts.
@@ -82,7 +97,7 @@ impl Default for GameOptions {
             double_after_split: true,
             split_aces_only_once: true,
             split_aces_receive_one_card: true,
-            surrender: true,
+            surrender: SurrenderOption::Late,
             insurance: true,
             rounding_blackjack: RoundingMode::Down,
             rounding_surrender: RoundingMode::Nearest,
@@ -147,8 +162,8 @@ impl GameOptions {
     /// ```
     /// use bjrs::{GameOptions, DoubleOption};
     ///
-    /// let options = GameOptions::default().with_double(DoubleOption::NineThrough11);
-    /// assert_eq!(options.double, DoubleOption::NineThrough11);
+    /// let options = GameOptions::default().with_double(DoubleOption::TenOrEleven);
+    /// assert_eq!(options.double, DoubleOption::TenOrEleven);
     /// ```
     #[must_use]
     pub const fn with_double(mut self, double: DoubleOption) -> Self {
@@ -220,19 +235,19 @@ impl GameOptions {
         self
     }
 
-    /// Sets whether surrender is allowed.
+    /// Sets the surrender rule.
     ///
     /// # Example
     ///
     /// ```
-    /// use bjrs::GameOptions;
+    /// use bjrs::{GameOptions, SurrenderOption};
     ///
-    /// let options = GameOptions::default().with_surrender(false);
-    /// assert_eq!(options.surrender, false);
+    /// let options = GameOptions::default().with_surrender(SurrenderOption::Early);
+    /// assert_eq!(options.surrender, SurrenderOption::Early);
     /// ```
     #[must_use]
-    pub const fn with_surrender(mut self, allowed: bool) -> Self {
-        self.surrender = allowed;
+    pub const fn with_surrender(mut self, surrender: SurrenderOption) -> Self {
+        self.surrender = surrender;
         self
     }
 

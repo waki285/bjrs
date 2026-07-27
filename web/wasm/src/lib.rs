@@ -1,6 +1,6 @@
 use bjrs::{
     Card, DoubleOption, Game, GameOptions, GameState, Hand, HandOutcome, HandStatus, PlayerResult,
-    RoundResult, RoundingMode, Suit,
+    RoundResult, RoundingMode, Suit, SurrenderOption,
 };
 use serde::{Deserialize, Serialize};
 use wasm_bindgen::prelude::*;
@@ -94,6 +94,11 @@ impl WasmGame {
             .map_err(js_err)
     }
 
+    pub fn decline_early_surrender(&self) -> Result<(), JsValue> {
+        let player_id = self.require_player()?;
+        self.game.decline_early_surrender(player_id).map_err(js_err)
+    }
+
     pub fn take_insurance(&self) -> Result<u32, JsValue> {
         let player_id = self.require_player()?;
         self.game
@@ -175,6 +180,7 @@ impl WasmGame {
 enum JsDoubleOption {
     Any,
     NineOrTen,
+    TenOrEleven,
     NineThrough11,
     NineThrough15,
     None,
@@ -185,9 +191,28 @@ impl From<JsDoubleOption> for DoubleOption {
         match value {
             JsDoubleOption::Any => Self::Any,
             JsDoubleOption::NineOrTen => Self::NineOrTen,
+            JsDoubleOption::TenOrEleven => Self::TenOrEleven,
             JsDoubleOption::NineThrough11 => Self::NineThrough11,
             JsDoubleOption::NineThrough15 => Self::NineThrough15,
             JsDoubleOption::None => Self::None,
+        }
+    }
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+enum JsSurrenderOption {
+    None,
+    Early,
+    Late,
+}
+
+impl From<JsSurrenderOption> for SurrenderOption {
+    fn from(value: JsSurrenderOption) -> Self {
+        match value {
+            JsSurrenderOption::None => Self::None,
+            JsSurrenderOption::Early => Self::Early,
+            JsSurrenderOption::Late => Self::Late,
         }
     }
 }
@@ -221,7 +246,7 @@ struct JsGameOptions {
     double_after_split: Option<bool>,
     split_aces_only_once: Option<bool>,
     split_aces_receive_one_card: Option<bool>,
-    surrender: Option<bool>,
+    surrender: Option<JsSurrenderOption>,
     insurance: Option<bool>,
     rounding_blackjack: Option<JsRoundingMode>,
     rounding_surrender: Option<JsRoundingMode>,
@@ -273,7 +298,7 @@ fn game_options_from_js(options: Option<JsValue>) -> Result<GameOptions, JsValue
         game_options.insurance = insurance;
     }
     if let Some(surrender) = provided.surrender {
-        game_options.surrender = surrender;
+        game_options.surrender = surrender.into();
     }
     if let Some(rounding_blackjack) = provided.rounding_blackjack {
         game_options.rounding_blackjack = rounding_blackjack.into();
@@ -482,6 +507,7 @@ fn state_to_str(state: GameState) -> &'static str {
         GameState::WaitingForPlayers => "WaitingForPlayers",
         GameState::Betting => "Betting",
         GameState::Dealing => "Dealing",
+        GameState::EarlySurrender => "EarlySurrender",
         GameState::Insurance => "Insurance",
         GameState::PlayerTurn => "PlayerTurn",
         GameState::DealerTurn => "DealerTurn",

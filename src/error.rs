@@ -92,6 +92,12 @@ pub enum InsuranceError {
     /// Player has not placed a bet.
     #[error("player has not placed a bet")]
     NoBet,
+    /// Player is not eligible to make an insurance decision.
+    #[error("player is not eligible for insurance")]
+    NotEligible,
+    /// Other eligible players have not made an insurance decision.
+    #[error("insurance decisions are still pending")]
+    DecisionsPending,
 }
 
 /// Errors that can occur during showdown.

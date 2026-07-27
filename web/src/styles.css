@@ -634,6 +634,31 @@ input:focus-visible {
   gap: 18px;
 }
 
+.game-over-actions {
+  display: grid;
+  gap: 18px;
+}
+
+.game-over-restart {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  border-top: 1px solid var(--line-strong);
+  padding-top: 18px;
+}
+
+.game-over-restart p {
+  margin: 0;
+  color: var(--negative);
+  font-size: 0.88rem;
+  font-weight: 700;
+}
+
+.game-over-restart strong {
+  font-variant-numeric: tabular-nums;
+}
+
 .settlement {
   border-bottom: 1px solid var(--line);
   padding-bottom: 18px;
@@ -975,6 +1000,11 @@ input:focus-visible {
   }
 
   .decision-action {
+    align-items: start;
+    flex-direction: column;
+  }
+
+  .game-over-restart {
     align-items: start;
     flex-direction: column;
   }

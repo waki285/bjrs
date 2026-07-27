@@ -1,7 +1,7 @@
 use crate::card::Card;
 use crate::error::ActionError;
 use crate::hand::{Hand, HandStatus};
-use crate::options::DoubleOption;
+use crate::options::{DoubleOption, SurrenderOption};
 
 use super::{Game, GameState};
 
@@ -18,10 +18,146 @@ impl Game {
         Ok(())
     }
 
+    fn ensure_early_surrender_turn(
+        &self,
+        player_id: u8,
+        hand_index: usize,
+    ) -> Result<(), ActionError> {
+        if *self.state.lock() != GameState::EarlySurrender {
+            return Err(ActionError::InvalidState);
+        }
+
+        if !self.is_player_turn(player_id, hand_index) {
+            return Err(ActionError::NotYourTurn);
+        }
+
+        if self.early_surrender_decided.lock().contains(&player_id) {
+            return Err(ActionError::CannotSurrender);
+        }
+
+        Ok(())
+    }
+
     fn advance_after_hand(&self) {
         self.advance_to_next_active_hand();
         if self.all_players_done() {
             *self.state.lock() = GameState::DealerTurn;
+        }
+    }
+
+    fn start_player_or_dealer_turn(&self) {
+        *self.current_turn.lock() = super::TurnPosition {
+            player_index: 0,
+            hand_index: 0,
+        };
+        self.advance_if_current_inactive();
+        *self.state.lock() = if self.all_players_done() {
+            GameState::DealerTurn
+        } else {
+            GameState::PlayerTurn
+        };
+    }
+
+    fn dealer_up_card_is_ace(&self) -> bool {
+        self.dealer_hand
+            .lock()
+            .up_card()
+            .is_some_and(|card| card.rank == 1)
+    }
+
+    fn dealer_up_card_can_have_blackjack(&self) -> bool {
+        self.dealer_hand
+            .lock()
+            .up_card()
+            .is_some_and(|card| card.rank == 1 || card.rank >= 10)
+    }
+
+    pub(super) fn peek_dealer_and_start_player_turn(&self) -> bool {
+        let dealer_has_blackjack =
+            self.dealer_up_card_can_have_blackjack() && self.dealer_hand.lock().is_blackjack();
+
+        if dealer_has_blackjack {
+            self.dealer_hand.lock().reveal_hole();
+            *self.state.lock() = GameState::RoundOver;
+            true
+        } else {
+            self.start_player_or_dealer_turn();
+            false
+        }
+    }
+
+    fn begin_insurance_or_peek(&self) {
+        if self.dealer_up_card_is_ace()
+            && self.options.insurance
+            && self.has_players_eligible_for_insurance()
+        {
+            *self.state.lock() = GameState::Insurance;
+        } else {
+            self.peek_dealer_and_start_player_turn();
+        }
+    }
+
+    fn can_surrender_hand(hand: &Hand) -> bool {
+        hand.status() == HandStatus::Active && hand.len() == 2 && !hand.is_from_split()
+    }
+
+    fn has_pending_early_surrender_decision(&self) -> bool {
+        let order = self.betting_order.lock();
+        let hands = self.hands.lock();
+        let decided = self.early_surrender_decided.lock();
+
+        order.iter().any(|player_id| {
+            !decided.contains(player_id)
+                && hands
+                    .get(player_id)
+                    .and_then(|player_hands| player_hands.first())
+                    .is_some_and(Self::can_surrender_hand)
+        })
+    }
+
+    fn advance_to_next_early_surrender_turn(&self) {
+        let mut turn = self.current_turn.lock();
+        let order = self.betting_order.lock();
+        let hands = self.hands.lock();
+        let decided = self.early_surrender_decided.lock();
+
+        while let Some(&player_id) = order.get(turn.player_index) {
+            let can_decide = !decided.contains(&player_id)
+                && hands
+                    .get(&player_id)
+                    .and_then(|player_hands| player_hands.first())
+                    .is_some_and(Self::can_surrender_hand);
+
+            if can_decide {
+                turn.hand_index = 0;
+                return;
+            }
+
+            turn.player_index += 1;
+        }
+
+        drop(decided);
+        drop(hands);
+        drop(order);
+        turn.hand_index = 0;
+    }
+
+    pub(super) fn begin_initial_action_phase(&self) {
+        if self.options.surrender == SurrenderOption::Early {
+            self.advance_to_next_early_surrender_turn();
+            if self.has_pending_early_surrender_decision() {
+                *self.state.lock() = GameState::EarlySurrender;
+                return;
+            }
+        }
+
+        self.begin_insurance_or_peek();
+    }
+
+    fn advance_after_early_surrender_decision(&self) {
+        self.advance_to_next_early_surrender_turn();
+        if !self.has_pending_early_surrender_decision() {
+            self.begin_insurance_or_peek();
         }
     }
 
@@ -321,27 +457,56 @@ impl Game {
         Ok(())
     }
 
+    /// Declines an early surrender offer and continues to the dealer check.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if early surrender is not enabled, it is not the
+    /// player's early-surrender turn, or the initial hand is not eligible.
+    pub fn decline_early_surrender(&self, player_id: u8) -> Result<(), ActionError> {
+        if self.options.surrender != SurrenderOption::Early {
+            return Err(ActionError::CannotSurrender);
+        }
+
+        self.ensure_early_surrender_turn(player_id, 0)?;
+
+        let hands = self.hands.lock();
+        let player_hands = hands.get(&player_id).ok_or(ActionError::PlayerNotFound)?;
+        let hand = player_hands.first().ok_or(ActionError::HandNotFound)?;
+
+        if hand.status() != HandStatus::Active {
+            return Err(ActionError::HandNotActive);
+        }
+        if !Self::can_surrender_hand(hand) {
+            return Err(ActionError::CannotSurrender);
+        }
+        drop(hands);
+
+        self.early_surrender_decided.lock().push(player_id);
+        self.advance_after_early_surrender_decision();
+
+        Ok(())
+    }
+
     /// Player action: Surrender (forfeit half the bet).
     ///
     /// # Errors
     ///
-    /// Returns an error if the game is not in player turn state, surrender is
-    /// disabled, it is not the player's turn, the player or hand cannot be
+    /// Returns an error if the current surrender phase does not permit the
+    /// action, it is not the player's turn, the player or hand cannot be
     /// found, or the hand is not eligible to surrender.
     pub fn surrender(&self, player_id: u8, hand_index: usize) -> Result<usize, ActionError> {
-        if *self.state.lock() != GameState::PlayerTurn {
-            return Err(ActionError::InvalidState);
-        }
-
-        // Check if surrender is allowed
-        if !self.options.surrender {
-            return Err(ActionError::CannotSurrender);
-        }
-
-        // Check if it's this player's turn
-        if !self.is_player_turn(player_id, hand_index) {
-            return Err(ActionError::NotYourTurn);
-        }
+        let early_surrender = match self.options.surrender {
+            SurrenderOption::None => return Err(ActionError::CannotSurrender),
+            SurrenderOption::Early => {
+                self.ensure_early_surrender_turn(player_id, hand_index)?;
+                true
+            }
+            SurrenderOption::Late => {
+                self.ensure_player_turn(player_id, hand_index)?;
+                false
+            }
+        };
 
         // Get the hand
         let mut hands = self.hands.lock();
@@ -356,8 +521,8 @@ impl Game {
             return Err(ActionError::HandNotActive);
         }
 
-        // Can only surrender on first two cards and not from split
-        if hand.len() != 2 || hand.is_from_split() {
+        // Can only surrender on the initial two-card hand.
+        if !Self::can_surrender_hand(hand) {
             return Err(ActionError::CannotSurrender);
         }
 
@@ -377,8 +542,12 @@ impl Game {
         }
         drop(money);
 
-        // Advance to next hand
-        self.advance_after_hand();
+        if early_surrender {
+            self.early_surrender_decided.lock().push(player_id);
+            self.advance_after_early_surrender_decision();
+        } else {
+            self.advance_after_hand();
+        }
 
         Ok(refund)
     }
@@ -447,6 +616,7 @@ impl Game {
         match self.options.double {
             DoubleOption::Any => true,
             DoubleOption::NineOrTen => value == 9 || value == 10,
+            DoubleOption::TenOrEleven => value == 10 || value == 11,
             DoubleOption::NineThrough11 => (9..=11).contains(&value),
             DoubleOption::NineThrough15 => (9..=15).contains(&value),
             DoubleOption::None => false,

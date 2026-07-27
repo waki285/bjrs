@@ -57,6 +57,8 @@ pub struct Game {
     insurance_bets: Mutex<HashMap<u8, usize>>,
     /// Players who have made their insurance decision.
     insurance_decided: Mutex<Vec<u8>>,
+    /// Players who have made their early surrender decision.
+    early_surrender_decided: Mutex<Vec<u8>>,
     /// Random number generator.
     rng: Mutex<ChaCha8Rng>,
 }
@@ -95,6 +97,7 @@ impl Game {
             }),
             insurance_bets: Mutex::new(HashMap::new()),
             insurance_decided: Mutex::new(Vec::new()),
+            early_surrender_decided: Mutex::new(Vec::new()),
             rng: Mutex::new(rng),
         }
     }
@@ -285,6 +288,7 @@ impl Game {
         self.betting_order.lock().clear();
         self.insurance_bets.lock().clear();
         self.insurance_decided.lock().clear();
+        self.early_surrender_decided.lock().clear();
         *self.current_turn.lock() = TurnPosition {
             player_index: 0,
             hand_index: 0,

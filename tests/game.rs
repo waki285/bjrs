@@ -4,7 +4,8 @@
 
 use bjrs::{
     ActionError, BetError, Card, DECK_SIZE, DealError, DoubleOption, Game, GameOptions, GameState,
-    Hand, HandStatus, InsuranceError, RoundingMode, ShowdownError, Suit,
+    Hand, HandOutcome, HandStatus, InsuranceError, RoundingMode, ShowdownError, Suit,
+    SurrenderOption,
 };
 
 const fn card(suit: Suit, rank: u8) -> Card {
@@ -64,7 +65,7 @@ fn options_builder_sets_fields() {
         .with_double_after_split(false)
         .with_split_aces_only_once(false)
         .with_split_aces_receive_one_card(false)
-        .with_surrender(false)
+        .with_surrender(SurrenderOption::None)
         .with_insurance(false)
         .with_rounding_blackjack(RoundingMode::Up)
         .with_rounding_surrender(RoundingMode::Down)
@@ -78,7 +79,7 @@ fn options_builder_sets_fields() {
     assert!(!options.double_after_split);
     assert!(!options.split_aces_only_once);
     assert!(!options.split_aces_receive_one_card);
-    assert!(!options.surrender);
+    assert_eq!(options.surrender, SurrenderOption::None);
     assert!(!options.insurance);
     assert_eq!(options.rounding_blackjack, RoundingMode::Up);
     assert_eq!(options.rounding_surrender, RoundingMode::Down);
@@ -357,6 +358,86 @@ fn double_down_allowed_and_updates_bet() {
 }
 
 #[test]
+fn double_down_on_ten_is_allowed_with_ten_or_eleven_rule() {
+    let options = GameOptions::default()
+        .with_insurance(false)
+        .with_double(DoubleOption::TenOrEleven);
+    let game = Game::new(options, 7);
+    let player = game.join(100);
+
+    game.start_betting();
+    game.bet(player, 10).unwrap();
+
+    set_deck_from_draws(
+        &game,
+        &[
+            card(Suit::Hearts, 5),   // player
+            card(Suit::Clubs, 2),    // dealer up
+            card(Suit::Diamonds, 5), // player
+            card(Suit::Spades, 3),   // dealer hole
+            card(Suit::Hearts, 10),  // double draw
+        ],
+    );
+
+    game.deal().unwrap();
+    assert_eq!(game.double_down(player, 0).unwrap().rank, 10);
+}
+
+#[test]
+fn double_down_on_eleven_is_allowed_with_ten_or_eleven_rule() {
+    let options = GameOptions::default()
+        .with_insurance(false)
+        .with_double(DoubleOption::TenOrEleven);
+    let game = Game::new(options, 8);
+    let player = game.join(100);
+
+    game.start_betting();
+    game.bet(player, 10).unwrap();
+
+    set_deck_from_draws(
+        &game,
+        &[
+            card(Suit::Hearts, 5),   // player
+            card(Suit::Clubs, 2),    // dealer up
+            card(Suit::Diamonds, 6), // player
+            card(Suit::Spades, 3),   // dealer hole
+            card(Suit::Hearts, 10),  // double draw
+        ],
+    );
+
+    game.deal().unwrap();
+    assert_eq!(game.double_down(player, 0).unwrap().rank, 10);
+}
+
+#[test]
+fn double_down_on_nine_is_rejected_with_ten_or_eleven_rule() {
+    let options = GameOptions::default()
+        .with_insurance(false)
+        .with_double(DoubleOption::TenOrEleven);
+    let game = Game::new(options, 9);
+    let player = game.join(100);
+
+    game.start_betting();
+    game.bet(player, 10).unwrap();
+
+    set_deck_from_draws(
+        &game,
+        &[
+            card(Suit::Hearts, 5),   // player
+            card(Suit::Clubs, 2),    // dealer up
+            card(Suit::Diamonds, 4), // player
+            card(Suit::Spades, 7),   // dealer hole
+        ],
+    );
+
+    game.deal().unwrap();
+    assert_eq!(
+        game.double_down(player, 0).unwrap_err(),
+        ActionError::CannotDouble
+    );
+}
+
+#[test]
 fn double_down_rejected_when_value_not_allowed() {
     let options = GameOptions::default()
         .with_insurance(false)
@@ -419,7 +500,7 @@ fn split_creates_two_hands() {
 fn surrender_refunds_half_bet() {
     let options = GameOptions::default()
         .with_insurance(false)
-        .with_surrender(true);
+        .with_surrender(SurrenderOption::Late);
     let game = Game::new(options, 21);
     let player = game.join(100);
 
@@ -441,6 +522,172 @@ fn surrender_refunds_half_bet() {
     assert_eq!(refund, 5);
     assert_eq!(game.get_money(player), Some(95));
     assert_eq!(*game.state.lock(), GameState::DealerTurn);
+}
+
+#[test]
+fn surrender_none_rejects_the_action() {
+    let options = GameOptions::default()
+        .with_insurance(false)
+        .with_surrender(SurrenderOption::None);
+    let game = Game::new(options, 22);
+    let player = game.join(100);
+
+    game.start_betting();
+    game.bet(player, 10).unwrap();
+
+    set_deck_from_draws(
+        &game,
+        &[
+            card(Suit::Hearts, 10),  // player
+            card(Suit::Clubs, 7),    // dealer up
+            card(Suit::Diamonds, 6), // player
+            card(Suit::Spades, 8),   // dealer hole
+        ],
+    );
+
+    game.deal().unwrap();
+    assert_eq!(game.state(), GameState::PlayerTurn);
+    assert_eq!(
+        game.surrender(player, 0).unwrap_err(),
+        ActionError::CannotSurrender
+    );
+}
+
+#[test]
+fn late_surrender_loses_to_a_peeked_dealer_blackjack() {
+    let options = GameOptions::default()
+        .with_insurance(false)
+        .with_surrender(SurrenderOption::Late);
+    let game = Game::new(options, 23);
+    let player = game.join(100);
+
+    game.start_betting();
+    game.bet(player, 10).unwrap();
+
+    set_deck_from_draws(
+        &game,
+        &[
+            card(Suit::Hearts, 10),  // player
+            card(Suit::Clubs, 10),   // dealer up
+            card(Suit::Diamonds, 6), // player
+            card(Suit::Spades, 1),   // dealer hole
+        ],
+    );
+
+    game.deal().unwrap();
+    assert_eq!(game.state(), GameState::RoundOver);
+    assert!(game.get_dealer_hand().is_hole_revealed());
+
+    let result = game.showdown().unwrap();
+    assert_eq!(result.players[0].hands[0].outcome, HandOutcome::Lose);
+    assert_eq!(game.get_money(player), Some(90));
+}
+
+#[test]
+fn early_surrender_refunds_half_even_against_dealer_blackjack() {
+    let options = GameOptions::default()
+        .with_insurance(false)
+        .with_surrender(SurrenderOption::Early);
+    let game = Game::new(options, 24);
+    let player = game.join(100);
+
+    game.start_betting();
+    game.bet(player, 10).unwrap();
+
+    set_deck_from_draws(
+        &game,
+        &[
+            card(Suit::Hearts, 10),  // player
+            card(Suit::Clubs, 10),   // dealer up
+            card(Suit::Diamonds, 6), // player
+            card(Suit::Spades, 1),   // dealer hole
+        ],
+    );
+
+    game.deal().unwrap();
+    assert_eq!(game.state(), GameState::EarlySurrender);
+    assert!(!game.get_dealer_hand().is_hole_revealed());
+
+    assert_eq!(game.surrender(player, 0).unwrap(), 5);
+    assert_eq!(game.state(), GameState::RoundOver);
+    assert!(game.get_dealer_hand().is_hole_revealed());
+
+    let result = game.showdown().unwrap();
+    assert_eq!(result.players[0].hands[0].outcome, HandOutcome::Surrendered);
+    assert_eq!(game.get_money(player), Some(95));
+}
+
+#[test]
+fn declining_early_surrender_then_loses_to_dealer_blackjack() {
+    let options = GameOptions::default()
+        .with_insurance(false)
+        .with_surrender(SurrenderOption::Early);
+    let game = Game::new(options, 25);
+    let player = game.join(100);
+
+    game.start_betting();
+    game.bet(player, 10).unwrap();
+
+    set_deck_from_draws(
+        &game,
+        &[
+            card(Suit::Hearts, 10),  // player
+            card(Suit::Clubs, 10),   // dealer up
+            card(Suit::Diamonds, 6), // player
+            card(Suit::Spades, 1),   // dealer hole
+        ],
+    );
+
+    game.deal().unwrap();
+    game.decline_early_surrender(player).unwrap();
+
+    assert_eq!(game.state(), GameState::RoundOver);
+    let result = game.showdown().unwrap();
+    assert_eq!(result.players[0].hands[0].outcome, HandOutcome::Lose);
+    assert_eq!(game.get_money(player), Some(90));
+}
+
+#[test]
+fn early_surrendered_hands_do_not_block_insurance() {
+    let options = GameOptions::default().with_surrender(SurrenderOption::Early);
+    let game = Game::new(options, 26);
+    let first_player = game.join(100);
+    let second_player = game.join(100);
+
+    game.start_betting();
+    game.bet(first_player, 10).unwrap();
+    game.bet(second_player, 10).unwrap();
+
+    set_deck_from_draws(
+        &game,
+        &[
+            card(Suit::Hearts, 10),  // first player
+            card(Suit::Diamonds, 9), // second player
+            card(Suit::Clubs, 1),    // dealer up
+            card(Suit::Hearts, 6),   // first player
+            card(Suit::Diamonds, 7), // second player
+            card(Suit::Spades, 9),   // dealer hole
+        ],
+    );
+
+    game.deal().unwrap();
+    assert_eq!(game.state(), GameState::EarlySurrender);
+    assert_eq!(game.current_player(), Some(first_player));
+
+    game.surrender(first_player, 0).unwrap();
+    assert_eq!(game.current_player(), Some(second_player));
+    game.decline_early_surrender(second_player).unwrap();
+
+    assert_eq!(game.state(), GameState::Insurance);
+    assert_eq!(
+        game.decline_insurance(first_player).unwrap_err(),
+        InsuranceError::NotEligible
+    );
+    game.decline_insurance(second_player).unwrap();
+
+    assert!(!game.finish_insurance().unwrap());
+    assert_eq!(game.state(), GameState::PlayerTurn);
+    assert_eq!(game.current_player(), Some(second_player));
 }
 
 #[test]

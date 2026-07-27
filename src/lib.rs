@@ -35,5 +35,5 @@ pub use card::{Card, DECK_SIZE, Suit};
 pub use error::{ActionError, BetError, DealError, InsuranceError, ReshuffleError, ShowdownError};
 pub use game::{Game, GameState, TurnPosition};
 pub use hand::{DealerHand, Hand, HandStatus};
-pub use options::{DoubleOption, GameOptions, RoundingMode};
+pub use options::{DoubleOption, GameOptions, RoundingMode, SurrenderOption};
 pub use result::{HandOutcome, HandResult, PlayerResult, RoundResult};
