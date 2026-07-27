@@ -1,8 +1,8 @@
 use bjrs::{
-    Card, Game, GameOptions, GameState, Hand, HandOutcome, HandStatus, PlayerResult, RoundResult,
-    Suit,
+    Card, DoubleOption, Game, GameOptions, GameState, Hand, HandOutcome, HandStatus, PlayerResult,
+    RoundResult, RoundingMode, Suit,
 };
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use wasm_bindgen::prelude::*;
 
 #[wasm_bindgen]
@@ -14,16 +14,17 @@ pub struct WasmGame {
 #[wasm_bindgen]
 impl WasmGame {
     #[wasm_bindgen(constructor)]
-    pub fn new(seed: u32) -> Self {
-        Self {
-            game: Game::new(GameOptions::default(), seed as u64),
+    pub fn new(seed: u32, options: Option<JsValue>) -> Result<Self, JsValue> {
+        Ok(Self {
+            game: Game::new(game_options_from_js(options)?, seed as u64),
             player_id: None,
-        }
+        })
     }
 
-    pub fn reset(&mut self, seed: u32) {
-        self.game = Game::new(GameOptions::default(), seed as u64);
+    pub fn reset(&mut self, seed: u32, options: Option<JsValue>) -> Result<(), JsValue> {
+        self.game = Game::new(game_options_from_js(options)?, seed as u64);
         self.player_id = None;
+        Ok(())
     }
 
     pub fn join(&mut self, money: u32) -> u32 {
@@ -40,15 +41,15 @@ impl WasmGame {
         self.player_id.map(|id| id as u32)
     }
 
-    pub fn start_betting(&self) {
+    pub fn start_betting(&self) -> Result<(), JsValue> {
+        self.game.check_and_reshuffle().map_err(js_err)?;
         self.game.start_betting();
+        Ok(())
     }
 
     pub fn bet(&self, amount: u32) -> Result<(), JsValue> {
         let player_id = self.require_player()?;
-        self.game
-            .bet(player_id, amount as usize)
-            .map_err(js_err)
+        self.game.bet(player_id, amount as usize).map_err(js_err)
     }
 
     pub fn deal(&self) -> Result<(), JsValue> {
@@ -103,9 +104,7 @@ impl WasmGame {
 
     pub fn decline_insurance(&self) -> Result<(), JsValue> {
         let player_id = self.require_player()?;
-        self.game
-            .decline_insurance(player_id)
-            .map_err(js_err)
+        self.game.decline_insurance(player_id).map_err(js_err)
     }
 
     pub fn finish_insurance(&self) -> Result<bool, JsValue> {
@@ -169,6 +168,129 @@ impl WasmGame {
 
         to_js_value(&snapshot)
     }
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+enum JsDoubleOption {
+    Any,
+    NineOrTen,
+    NineThrough11,
+    NineThrough15,
+    None,
+}
+
+impl From<JsDoubleOption> for DoubleOption {
+    fn from(value: JsDoubleOption) -> Self {
+        match value {
+            JsDoubleOption::Any => Self::Any,
+            JsDoubleOption::NineOrTen => Self::NineOrTen,
+            JsDoubleOption::NineThrough11 => Self::NineThrough11,
+            JsDoubleOption::NineThrough15 => Self::NineThrough15,
+            JsDoubleOption::None => Self::None,
+        }
+    }
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+enum JsRoundingMode {
+    Up,
+    Down,
+    Nearest,
+}
+
+impl From<JsRoundingMode> for RoundingMode {
+    fn from(value: JsRoundingMode) -> Self {
+        match value {
+            JsRoundingMode::Up => Self::Up,
+            JsRoundingMode::Down => Self::Down,
+            JsRoundingMode::Nearest => Self::Nearest,
+        }
+    }
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct JsGameOptions {
+    decks: Option<u8>,
+    blackjack_pays: Option<f64>,
+    stand_on_soft_17: Option<bool>,
+    double: Option<JsDoubleOption>,
+    split: Option<u8>,
+    double_after_split: Option<bool>,
+    split_aces_only_once: Option<bool>,
+    split_aces_receive_one_card: Option<bool>,
+    surrender: Option<bool>,
+    insurance: Option<bool>,
+    rounding_blackjack: Option<JsRoundingMode>,
+    rounding_surrender: Option<JsRoundingMode>,
+    penetration: Option<f64>,
+}
+
+fn game_options_from_js(options: Option<JsValue>) -> Result<GameOptions, JsValue> {
+    let Some(options) = options else {
+        return Ok(GameOptions::default());
+    };
+
+    let provided: JsGameOptions = serde_wasm_bindgen::from_value(options)
+        .map_err(|err| JsValue::from_str(&err.to_string()))?;
+    let mut game_options = GameOptions::default();
+
+    if let Some(decks) = provided.decks {
+        if decks == 0 {
+            return Err(JsValue::from_str("decks must be greater than zero"));
+        }
+        game_options.decks = decks;
+    }
+    if let Some(blackjack_pays) = provided.blackjack_pays {
+        if !blackjack_pays.is_finite() || blackjack_pays <= 0.0 {
+            return Err(JsValue::from_str(
+                "blackjackPays must be a finite positive number",
+            ));
+        }
+        game_options.blackjack_pays = blackjack_pays;
+    }
+    if let Some(stand_on_soft_17) = provided.stand_on_soft_17 {
+        game_options.stand_on_soft_17 = stand_on_soft_17;
+    }
+    if let Some(double) = provided.double {
+        game_options.double = double.into();
+    }
+    if let Some(split) = provided.split {
+        game_options.split = split;
+    }
+    if let Some(double_after_split) = provided.double_after_split {
+        game_options.double_after_split = double_after_split;
+    }
+    if let Some(split_aces_only_once) = provided.split_aces_only_once {
+        game_options.split_aces_only_once = split_aces_only_once;
+    }
+    if let Some(split_aces_receive_one_card) = provided.split_aces_receive_one_card {
+        game_options.split_aces_receive_one_card = split_aces_receive_one_card;
+    }
+    if let Some(insurance) = provided.insurance {
+        game_options.insurance = insurance;
+    }
+    if let Some(surrender) = provided.surrender {
+        game_options.surrender = surrender;
+    }
+    if let Some(rounding_blackjack) = provided.rounding_blackjack {
+        game_options.rounding_blackjack = rounding_blackjack.into();
+    }
+    if let Some(rounding_surrender) = provided.rounding_surrender {
+        game_options.rounding_surrender = rounding_surrender.into();
+    }
+    if let Some(penetration) = provided.penetration {
+        if !penetration.is_finite() || !(0.0..=1.0).contains(&penetration) {
+            return Err(JsValue::from_str(
+                "penetration must be a finite number from 0 through 1",
+            ));
+        }
+        game_options.penetration = penetration;
+    }
+
+    Ok(game_options)
 }
 
 impl WasmGame {
@@ -281,7 +403,11 @@ struct JsRoundResult {
 impl From<RoundResult> for JsRoundResult {
     fn from(result: RoundResult) -> Self {
         Self {
-            players: result.players.into_iter().map(JsPlayerResult::from).collect(),
+            players: result
+                .players
+                .into_iter()
+                .map(JsPlayerResult::from)
+                .collect(),
             dealer_value: result.dealer_value,
             dealer_bust: result.dealer_bust,
             dealer_blackjack: result.dealer_blackjack,
@@ -389,4 +515,42 @@ fn js_err<E: core::fmt::Display>(err: E) -> JsValue {
 
 fn to_js_value<T: Serialize>(value: &T) -> Result<JsValue, JsValue> {
     serde_wasm_bindgen::to_value(value).map_err(|err| JsValue::from_str(&err.to_string()))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use bjrs::DECK_SIZE;
+
+    #[test]
+    fn starting_betting_reshuffles_when_penetration_is_reached() {
+        let options = GameOptions::default()
+            .with_decks(1)
+            .with_insurance(false)
+            .with_penetration(0.01);
+        let game = Game::new(options, 1);
+        let player_id = game.join(100);
+
+        game.start_betting();
+        game.bet(player_id, 10).unwrap();
+        game.deal().unwrap();
+
+        if game.state() == GameState::PlayerTurn {
+            game.stand(player_id, 0).unwrap();
+        }
+        assert_eq!(game.state(), GameState::DealerTurn);
+
+        game.dealer_play().unwrap();
+        game.showdown().unwrap();
+        game.clear_round();
+
+        assert!(game.cards_remaining() < DECK_SIZE);
+
+        let wasm_game = WasmGame {
+            game,
+            player_id: Some(player_id),
+        };
+        assert!(wasm_game.start_betting().is_ok());
+        assert_eq!(wasm_game.game.cards_remaining(), DECK_SIZE);
+    }
 }

@@ -436,7 +436,7 @@ impl Game {
     }
 
     /// Checks if all players have finished their turns.
-    fn all_players_done(&self) -> bool {
+    pub(super) fn all_players_done(&self) -> bool {
         let turn = self.current_turn.lock();
         let order = self.betting_order.lock();
         turn.player_index >= order.len()

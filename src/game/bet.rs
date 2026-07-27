@@ -139,7 +139,11 @@ impl Game {
         } else {
             // Skip players with blackjack
             self.advance_if_current_inactive();
-            *state = GameState::PlayerTurn;
+            *state = if self.all_players_done() {
+                GameState::DealerTurn
+            } else {
+                GameState::PlayerTurn
+            };
             drop(state);
         }
 

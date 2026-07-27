@@ -101,7 +101,7 @@ impl Game {
         order.iter().all(|id| decided.contains(id))
     }
 
-    /// Finishes the insurance phase and moves to player turns.
+    /// Finishes the insurance phase and advances to the next required turn.
     ///
     /// This should be called after all players have made their insurance decision.
     /// If the dealer has blackjack, the round ends immediately.
@@ -124,9 +124,13 @@ impl Game {
             *self.state.lock() = GameState::RoundOver;
             Ok(true)
         } else {
-            // Continue to player turns
+            // A natural blackjack has no player action, so dealer play must begin instead.
             self.advance_if_current_inactive();
-            *self.state.lock() = GameState::PlayerTurn;
+            *self.state.lock() = if self.all_players_done() {
+                GameState::DealerTurn
+            } else {
+                GameState::PlayerTurn
+            };
             Ok(false)
         }
     }

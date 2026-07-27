@@ -207,6 +207,61 @@ fn basic_round_flow() {
 }
 
 #[test]
+fn natural_blackjack_moves_directly_to_dealer_turn() {
+    let options = GameOptions::default().with_insurance(false);
+    let game = Game::new(options, 42);
+    let player = game.join(100);
+
+    game.start_betting();
+    game.bet(player, 10).unwrap();
+
+    set_deck_from_draws(
+        &game,
+        &[
+            card(Suit::Hearts, 1),   // player
+            card(Suit::Clubs, 10),   // dealer up
+            card(Suit::Spades, 13),  // player
+            card(Suit::Diamonds, 7), // dealer hole
+        ],
+    );
+
+    game.deal().unwrap();
+
+    assert_eq!(*game.state.lock(), GameState::DealerTurn);
+    assert_eq!(game.current_player(), None);
+
+    game.dealer_play().unwrap();
+    assert_eq!(*game.state.lock(), GameState::RoundOver);
+}
+
+#[test]
+fn natural_blackjack_moves_to_dealer_turn_after_insurance() {
+    let options = GameOptions::default().with_insurance(true);
+    let game = Game::new(options, 42);
+    let player = game.join(100);
+
+    game.start_betting();
+    game.bet(player, 10).unwrap();
+
+    set_deck_from_draws(
+        &game,
+        &[
+            card(Suit::Hearts, 1),   // player
+            card(Suit::Clubs, 1),    // dealer up
+            card(Suit::Spades, 13),  // player
+            card(Suit::Diamonds, 9), // dealer hole
+        ],
+    );
+
+    game.deal().unwrap();
+    game.decline_insurance(player).unwrap();
+
+    assert!(!game.finish_insurance().unwrap());
+    assert_eq!(*game.state.lock(), GameState::DealerTurn);
+    assert_eq!(game.current_player(), None);
+}
+
+#[test]
 fn insurance_flow_with_dealer_blackjack() {
     let options = GameOptions::default().with_insurance(true);
     let game = Game::new(options, 99);
