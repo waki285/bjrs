@@ -68,7 +68,7 @@ jobs:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           gitHubToken: ${{ secrets.GITHUB_TOKEN }}
-          workingDirectory: web
+          workingDirectory: .
           packageManager: npm
           wranglerVersion: 4.114.0
-          command: pages deploy ./dist --project-name=${{ vars.CLOUDFLARE_PAGES_PROJECT }}
+          command: pages deploy ./web/dist --project-name=${{ vars.CLOUDFLARE_PAGES_PROJECT }}
