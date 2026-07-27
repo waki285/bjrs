@@ -346,7 +346,15 @@ fn available_actions(game: &Game, player_id: u8) -> ActionAvailability {
         && has_funds_for_split
         && !(is_ace && hand.is_from_split() && game.options.split_aces_only_once);
 
-    let can_surrender = matches!(game.options.surrender, SurrenderOption::Late)
+    let dealer_can_have_blackjack = game
+        .get_dealer_hand()
+        .up_card()
+        .is_some_and(|card| card.rank == 1 || card.rank >= 10);
+    let can_surrender = (matches!(game.options.surrender, SurrenderOption::Late)
+        || (matches!(
+            game.options.surrender,
+            SurrenderOption::Early | SurrenderOption::EarlyWithoutAce
+        ) && !dealer_can_have_blackjack))
         && hand.len() == 2
         && !hand.is_from_split();
 

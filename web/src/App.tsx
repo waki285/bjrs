@@ -118,6 +118,7 @@ const doubleRuleOptions: Array<{ value: DoubleRule; label: string }> = [
 const surrenderRuleOptions: Array<{ value: SurrenderRule; label: string }> = [
   { value: "none", label: "None" },
   { value: "early", label: "Early" },
+  { value: "earlyWithoutAce", label: "Early except Ace" },
   { value: "late", label: "Late" },
 ];
 
@@ -455,6 +456,11 @@ export default function App() {
   const isEarlySurrenderTurn = Boolean(
     snapshot?.state === "EarlySurrender" && isActivePlayer && activeHand?.status === "Active",
   );
+  const dealerUpCardRank = snapshot?.dealer.cards[0]?.rank;
+  const dealerCanHaveBlackjack =
+    dealerUpCardRank === 1 || (dealerUpCardRank !== undefined && dealerUpCardRank >= 10);
+  const usesEarlySurrender =
+    rules.surrender === "early" || rules.surrender === "earlyWithoutAce";
   const availableBalance = snapshot?.money ?? 0;
   const canPlaceBet = Boolean(
     joined && snapshot?.state === "Betting" && bet >= 1 && availableBalance >= bet,
@@ -481,7 +487,8 @@ export default function App() {
     activeHand &&
       activeHand.cards.length === 2 &&
       !activeHand.from_split &&
-      ((rules.surrender === "early" && isEarlySurrenderTurn) ||
+      ((usesEarlySurrender && isEarlySurrenderTurn) ||
+        (usesEarlySurrender && isActiveHand && !dealerCanHaveBlackjack) ||
         (rules.surrender === "late" && isActiveHand)),
   );
   const isGameOver = Boolean(

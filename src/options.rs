@@ -27,6 +27,9 @@ pub enum SurrenderOption {
     None,
     /// Surrender is offered before the dealer checks for blackjack.
     Early,
+    /// Surrender is offered before the dealer checks for blackjack, except
+    /// when the dealer's up card is an ace.
+    EarlyWithoutAce,
     /// Surrender is offered after the dealer checks for blackjack.
     #[default]
     Late,

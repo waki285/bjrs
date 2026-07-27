@@ -618,6 +618,117 @@ fn early_surrender_refunds_half_even_against_dealer_blackjack() {
 }
 
 #[test]
+fn early_surrender_skips_the_decision_when_dealer_cannot_have_blackjack() {
+    let options = GameOptions::default()
+        .with_insurance(false)
+        .with_surrender(SurrenderOption::Early);
+    let game = Game::new(options, 27);
+    let player = game.join(100);
+
+    game.start_betting();
+    game.bet(player, 10).unwrap();
+
+    set_deck_from_draws(
+        &game,
+        &[
+            card(Suit::Hearts, 10),  // player
+            card(Suit::Clubs, 7),    // dealer up
+            card(Suit::Diamonds, 6), // player
+            card(Suit::Spades, 8),   // dealer hole
+        ],
+    );
+
+    game.deal().unwrap();
+    assert_eq!(game.state(), GameState::PlayerTurn);
+    assert_eq!(game.surrender(player, 0).unwrap(), 5);
+    assert_eq!(game.state(), GameState::DealerTurn);
+}
+
+#[test]
+fn early_without_ace_is_not_offered_against_an_ace() {
+    let options = GameOptions::default()
+        .with_insurance(false)
+        .with_surrender(SurrenderOption::EarlyWithoutAce);
+    let game = Game::new(options, 28);
+    let player = game.join(100);
+
+    game.start_betting();
+    game.bet(player, 10).unwrap();
+
+    set_deck_from_draws(
+        &game,
+        &[
+            card(Suit::Hearts, 10),  // player
+            card(Suit::Clubs, 1),    // dealer up
+            card(Suit::Diamonds, 6), // player
+            card(Suit::Spades, 9),   // dealer hole
+        ],
+    );
+
+    game.deal().unwrap();
+    assert_eq!(game.state(), GameState::PlayerTurn);
+    assert_eq!(
+        game.surrender(player, 0).unwrap_err(),
+        ActionError::CannotSurrender
+    );
+}
+
+#[test]
+fn early_without_ace_is_offered_against_a_ten_value() {
+    let options = GameOptions::default()
+        .with_insurance(false)
+        .with_surrender(SurrenderOption::EarlyWithoutAce);
+    let game = Game::new(options, 29);
+    let player = game.join(100);
+
+    game.start_betting();
+    game.bet(player, 10).unwrap();
+
+    set_deck_from_draws(
+        &game,
+        &[
+            card(Suit::Hearts, 10),  // player
+            card(Suit::Clubs, 11),   // dealer up
+            card(Suit::Diamonds, 6), // player
+            card(Suit::Spades, 1),   // dealer hole
+        ],
+    );
+
+    game.deal().unwrap();
+    assert_eq!(game.state(), GameState::EarlySurrender);
+    assert_eq!(game.surrender(player, 0).unwrap(), 5);
+    assert_eq!(game.state(), GameState::RoundOver);
+    assert_eq!(game.get_money(player), Some(95));
+}
+
+#[test]
+fn early_without_ace_skips_the_decision_when_dealer_cannot_have_blackjack() {
+    let options = GameOptions::default()
+        .with_insurance(false)
+        .with_surrender(SurrenderOption::EarlyWithoutAce);
+    let game = Game::new(options, 30);
+    let player = game.join(100);
+
+    game.start_betting();
+    game.bet(player, 10).unwrap();
+
+    set_deck_from_draws(
+        &game,
+        &[
+            card(Suit::Hearts, 10),  // player
+            card(Suit::Clubs, 7),    // dealer up
+            card(Suit::Diamonds, 6), // player
+            card(Suit::Spades, 8),   // dealer hole
+        ],
+    );
+
+    game.deal().unwrap();
+    assert_eq!(game.state(), GameState::PlayerTurn);
+    assert_eq!(game.surrender(player, 0).unwrap(), 5);
+    assert_eq!(game.state(), GameState::DealerTurn);
+}
+
+#[test]
 fn declining_early_surrender_then_loses_to_dealer_blackjack() {
     let options = GameOptions::default()
         .with_insurance(false)

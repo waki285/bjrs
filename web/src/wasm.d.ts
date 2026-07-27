@@ -11,7 +11,7 @@ declare module "../wasm/pkg/bjrs_wasm" {
 
   export type WasmRoundingMode = "up" | "down" | "nearest";
 
-  export type WasmSurrenderOption = "none" | "early" | "late";
+  export type WasmSurrenderOption = "none" | "early" | "earlyWithoutAce" | "late";
 
   export type WasmGameOptions = {
     decks?: number;

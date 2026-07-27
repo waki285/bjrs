@@ -72,6 +72,23 @@ impl Game {
             .is_some_and(|card| card.rank == 1 || card.rank >= 10)
     }
 
+    fn should_offer_early_surrender(&self) -> bool {
+        match self.options.surrender {
+            SurrenderOption::Early => self.dealer_up_card_can_have_blackjack(),
+            SurrenderOption::EarlyWithoutAce => {
+                self.dealer_up_card_can_have_blackjack() && !self.dealer_up_card_is_ace()
+            }
+            SurrenderOption::None | SurrenderOption::Late => false,
+        }
+    }
+
+    fn can_surrender_during_player_turn_without_prompt(&self) -> bool {
+        matches!(
+            self.options.surrender,
+            SurrenderOption::Early | SurrenderOption::EarlyWithoutAce
+        ) && !self.dealer_up_card_can_have_blackjack()
+    }
+
     pub(super) fn peek_dealer_and_start_player_turn(&self) -> bool {
         let dealer_has_blackjack =
             self.dealer_up_card_can_have_blackjack() && self.dealer_hand.lock().is_blackjack();
@@ -143,7 +160,7 @@ impl Game {
     }
 
     pub(super) fn begin_initial_action_phase(&self) {
-        if self.options.surrender == SurrenderOption::Early {
+        if self.should_offer_early_surrender() {
             self.advance_to_next_early_surrender_turn();
             if self.has_pending_early_surrender_decision() {
                 *self.state.lock() = GameState::EarlySurrender;
@@ -464,7 +481,10 @@ impl Game {
     /// Returns an error if early surrender is not enabled, it is not the
     /// player's early-surrender turn, or the initial hand is not eligible.
     pub fn decline_early_surrender(&self, player_id: u8) -> Result<(), ActionError> {
-        if self.options.surrender != SurrenderOption::Early {
+        if !matches!(
+            self.options.surrender,
+            SurrenderOption::Early | SurrenderOption::EarlyWithoutAce
+        ) {
             return Err(ActionError::CannotSurrender);
         }
 
@@ -498,9 +518,16 @@ impl Game {
     pub fn surrender(&self, player_id: u8, hand_index: usize) -> Result<usize, ActionError> {
         let early_surrender = match self.options.surrender {
             SurrenderOption::None => return Err(ActionError::CannotSurrender),
-            SurrenderOption::Early => {
-                self.ensure_early_surrender_turn(player_id, hand_index)?;
-                true
+            SurrenderOption::Early | SurrenderOption::EarlyWithoutAce => {
+                if self.state() == GameState::EarlySurrender {
+                    self.ensure_early_surrender_turn(player_id, hand_index)?;
+                    true
+                } else if self.can_surrender_during_player_turn_without_prompt() {
+                    self.ensure_player_turn(player_id, hand_index)?;
+                    false
+                } else {
+                    return Err(ActionError::CannotSurrender);
+                }
             }
             SurrenderOption::Late => {
                 self.ensure_player_turn(player_id, hand_index)?;

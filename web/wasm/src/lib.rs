@@ -204,6 +204,7 @@ impl From<JsDoubleOption> for DoubleOption {
 enum JsSurrenderOption {
     None,
     Early,
+    EarlyWithoutAce,
     Late,
 }
 
@@ -212,6 +213,7 @@ impl From<JsSurrenderOption> for SurrenderOption {
         match value {
             JsSurrenderOption::None => Self::None,
             JsSurrenderOption::Early => Self::Early,
+            JsSurrenderOption::EarlyWithoutAce => Self::EarlyWithoutAce,
             JsSurrenderOption::Late => Self::Late,
         }
     }
